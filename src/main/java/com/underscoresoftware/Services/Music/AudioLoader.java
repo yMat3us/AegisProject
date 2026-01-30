@@ -31,7 +31,7 @@ public class AudioLoader extends AbstractAudioLoadResultHandler {
 
         final var trackTitle = track.getInfo().getTitle();
 
-        event.reply("**Adicionado a Fila:** **" + trackTitle + "**\n**Pedida Por:** <@" + isUserData.isRequesterUser() + ">").queue();
+        event.getHook().sendMessage("**Adicionado a Fila:** **" + trackTitle + "**\n**Pedida Por:** <@" + isUserData.isRequesterUser() + ">").queue();
     }
 
     @Override
@@ -42,7 +42,7 @@ public class AudioLoader extends AbstractAudioLoadResultHandler {
 
             isTrack.setUserData(isUserData);
         });
-        event.reply("**Adicionadas** `" + trackCount + "` **Músicas à Fila de:" + result.getInfo().getName() + "!**").queue();
+        event.getHook().sendMessage("**Adicionadas** `" + trackCount + "` **Músicas à Fila de:" + result.getInfo().getName() + "!**").queue();
 
         this.mngr.scheduler.enqueuePlaylist(result.getTracks());
     }
@@ -77,28 +77,19 @@ public class AudioLoader extends AbstractAudioLoadResultHandler {
 
         TrackSelectionCache.put(event.getUser().getIdLong(), tracks);
 
-        event.reply("🎵 Escolha a Música:")
-                //.addComponents(ActionRow.of(Menu.build()))
+        event.getHook()
+                .sendMessage("**Escolha a Música:**")
+                .addComponents(ActionRow.of(Menu.build()))
                 .queue();
-
-        /*final Track firstTrack = tracks.get(0);
-
-        var isUserData = new MyUserData(event.getUser().getIdLong(), event.getGuild().getIdLong(), event.getChannel().getIdLong());
-
-        firstTrack.setUserData(isUserData);
-
-        event.getChannel().sendMessage("**Adicionado a Fila:** **" + firstTrack.getInfo().getTitle() + "**\n**Pedida Por:** <@" + isUserData.isRequesterUser() + ">").queue();
-
-        this.mngr.scheduler.enqueue(firstTrack);*/
     }
 
     @Override
     public void noMatches() {
-        event.reply("No matches found for your input!").setEphemeral(true).queue();
+        event.getHook().sendMessage("No matches found for your input!").setEphemeral(true).queue();
     }
 
     @Override
     public void loadFailed(@NotNull LoadFailed result) {
-        event.reply("Failed to load track! " + result.getException().getMessage()).setEphemeral(true).queue();
+        event.getHook().sendMessage("Failed to load track! " + result.getException().getMessage()).setEphemeral(true).queue();
     }
 }

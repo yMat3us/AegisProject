@@ -55,13 +55,13 @@ public class Play extends Command {
 
         if(Event.getName().equals("Play".toLowerCase())) {
             TextInput Search = TextInput.create("Search", TextInputStyle.SHORT)
-                    .setPlaceholder("Digite o Nome ou URL da Música\n(OBS):\nURL's Aceitas:\nSpotify\nAppleMusic\nYouTube")
+                    .setPlaceholder("Digite o Nome ou URL da Música")
                     .setMinLength(1)
                     .setMaxLength(140)
                     .build();
 
-            Modal ModalSearch = Modal.create("ModalSearch", "ModalPlay")
-                    .addComponents(Label.of("Search/Link", Search))
+            Modal ModalSearch = Modal.create("ModalSearch", "Tocar Música")
+                    .addComponents(Label.of("Search/URL", Search))
                     .build();
 
             Event.replyModal(ModalSearch).queue();

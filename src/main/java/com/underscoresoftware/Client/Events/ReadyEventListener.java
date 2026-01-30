@@ -10,10 +10,9 @@ import dev.arbjerg.lavalink.client.LavalinkClient;
 import dev.arbjerg.lavalink.client.Link;
 import dev.arbjerg.lavalink.client.player.Track;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
-import net.dv8tion.jda.api.components.selections.SelectOption;
-import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -22,6 +21,7 @@ import reactor.util.annotation.NonNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ReadyEventListener extends ListenerAdapter {
     private static final Map<String, Command> Commands = new HashMap<>();
@@ -76,11 +76,11 @@ public class ReadyEventListener extends ListenerAdapter {
             var Manager = this.getOrCreateMusicManager(Event.getGuild().getIdLong());
 
             if(Search.matches(Regex)) {
-                Event.reply("**Agradeço Sua Requisição.**").setEphemeral(true).queue();
+                Event.deferReply().queue();
                 isLink.loadItem(Identifier).subscribe(new AudioLoader(Event, Manager));
             }
             if(!Search.matches(Regex)) {
-                Event.reply("**Agradeço Sua Requisição.**").setEphemeral(true).queue();
+                Event.deferReply().queue();
                 isLink.loadItem(Identifier).subscribe(new AudioLoader(Event, Manager));
             }
         }
@@ -95,8 +95,14 @@ public class ReadyEventListener extends ListenerAdapter {
 
         List<Track> Tracks = TrackSelectionCache.get(isUserId);
 
+        if (Event.getUser().getIdLong() != isUserId) {
+            Event.getHook().sendMessage("Uso Exclusivo do Autor do Comando")
+                    .setEphemeral(true)
+                    .queue();
+        }
+
         if (Tracks == null || Index >= Tracks.size()) {
-            Event.reply("Essa Seleção Expirou. Use /Play de Novo.")
+            Event.getHook().sendMessage("Essa Seleção Expirou. Use /Play de Novo.")
                     .setEphemeral(true)
                     .queue();
             return;
@@ -107,8 +113,41 @@ public class ReadyEventListener extends ListenerAdapter {
         TrackSelectionCache.remove(isUserId);
 
         Event.deferEdit().queue();
+        Event.getHook()
+                .editOriginalComponents(ActionRow.of(Event.getSelectMenu().asDisabled()))
+                .queue();
+        Event.getHook()
+                .deleteOriginal()
+                .queueAfter(15, TimeUnit.SECONDS);
 
         isLink.loadItem(Chosen.getInfo().getUri()).subscribe(new AudioLoader(Event, Manager));
+    }
+    public void onButtonInteraction(ButtonInteractionEvent Event) {
+        if (Event.getComponentId().equals("Button_1")) {
+            this.musicManagers.get(Event.getGuild().getIdLong()).scheduler.nextTrack();
+
+            Event.deferEdit().queue();
+        } else if (Event.getComponentId().equals("Button_2")) {
+            this.client.getOrCreateLink(Event.getGuild().getIdLong())
+                    .getPlayer()
+                    .flatMap((Player) -> Player.setPaused(true))
+                    .subscribe((Player) -> {
+                        Event.reply("**Paused**").setEphemeral(true).queue();
+                    });
+        } else if (Event.getComponentId().equals("Button_3")) {
+            this.client.getOrCreateLink(Event.getGuild().getIdLong())
+                    .getPlayer()
+                    .flatMap((Player) -> Player.setPaused(false))
+                    .subscribe((Player) -> {
+                        Event.reply("**Played**").setEphemeral(true).queue();
+                    });
+        } else if (Event.getComponentId().equals("Button_4")) {
+            this.musicManagers.get(Event.getGuild().getIdLong()).scheduler.previousTrack();
+            Event.deferEdit().queue();
+        } else if (Event.getComponentId().equals("Button_5")) {
+            this.getOrCreateMusicManager(Event.getGuild().getIdLong()).stop();
+            Event.reply("**Stopped**").setEphemeral(true).queue();
+        }
     }
     public GuildMusicManager getOrCreateMusicManager(long guildId) {
         synchronized(this) {

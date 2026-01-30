@@ -1,5 +1,4 @@
 package com.underscoresoftware.Services.Music;
-import com.underscoresoftware.Client.Events.BotInitializer;
 import com.underscoresoftware.Services.MyUserData;
 import com.underscoresoftware.Structures.BotClient;
 import com.underscoresoftware.Utils.ThumbnailUtil;
@@ -7,15 +6,21 @@ import dev.arbjerg.lavalink.client.player.Track;
 import dev.arbjerg.lavalink.protocol.v4.Message;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
-
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.emoji.Emoji;
 import java.awt.*;
+import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 
 public class TrackScheduler {
     private final GuildMusicManager guildMusicManager;
-    public final Queue<Track> queue = new LinkedList<>();
+    public final Deque<Track> queue = new LinkedList<>();
+    private final Deque<Track> history = new LinkedList<>();
+    private Track current;
+    private net.dv8tion.jda.api.entities.Message nowPlayingMessage;
 
     public TrackScheduler(GuildMusicManager guildMusicManager) {
         this.guildMusicManager = guildMusicManager;
@@ -73,30 +78,96 @@ public class TrackScheduler {
                 .setAuthor("Tocando Agora...", null, JavaDiscordAPI.getGuildById(GuildId).getIconUrl())
                 .setColor(new Color(0x006AFF));
 
-        if(JavaDiscordAPI.getGuildById(GuildId).getTextChannelById(ChannelId) != null) {
-            JavaDiscordAPI.getGuildById(GuildId).getTextChannelById(ChannelId).sendMessageEmbeds(Embed.build()).queue();
+        if(JavaDiscordAPI.getGuildById(GuildId).getTextChannelById(ChannelId) == null) return;
+        if(nowPlayingMessage == null) {
+            JavaDiscordAPI.getGuildById(GuildId)
+                    .getTextChannelById(ChannelId)
+                    .sendMessageEmbeds(Embed.build())
+                    .addComponents(
+                            ActionRow.of(
+                                    Button.success("Button_1", Emoji.fromFormatted("<:Next:1465383700115230762>")),
+                                    Button.success("Button_2", Emoji.fromFormatted("<:Pause:1465383864750047285>")),
+                                    Button.success("Button_3", Emoji.fromFormatted("<:Play:1465383633195106509>")),
+                                    Button.success("Button_4", Emoji.fromFormatted("<:Previous:1465383575267446857>")),
+                                    Button.success("Button_5", Emoji.fromFormatted("<:Stop:1465384033579171870>"))
+                            )
+                    )
+                    .queue(Message -> nowPlayingMessage = Message);
+        } else {
+            nowPlayingMessage.editMessageEmbeds(Embed.build()).queue();
         }
     }
 
     public void onTrackEnd(Track lastTrack, Message.EmittedEvent.TrackEndEvent.AudioTrackEndReason endReason) {
-        if (endReason.getMayStartNext()) {
-            final var nextTrack = this.queue.poll();
-
-            System.out.println(nextTrack);
-
-            if (nextTrack != null) {
-                this.startTrack(nextTrack);
+        if (!endReason.getMayStartNext()) {
+            try {
+                clearNowPlayingMessage();
+            } catch(ExceptionInInitializerError E) {
+                System.out.println(E);
             }
+            return;
+        }
+
+        Track Next = queue.poll();
+        if (Next != null) {
+            this.nextTrack();
+        } else {
+            clearNowPlayingMessage();
+            current = null;
         }
     }
 
-    private void startTrack(Track track) {
+    public void nextTrack() {
+
+        if (current != null) {
+            history.push(current);
+        }
+
+        this.guildMusicManager.getPlayer().ifPresent(Player -> {
+            MyUserData isUserData = Player.getTrack().getUserData(MyUserData.class);
+            long GuildId = isUserData.isRequesterGuild();
+            long ChannelId = isUserData.isRequesterChannel();
+            JDA JavaDiscordAPI = BotClient.GetJDA();
+
+            Track Next = this.queue.poll();
+
+            if (Next != null) {
+                this.startTrack(Next);
+            } else {
+                JavaDiscordAPI.getGuildById(GuildId).getTextChannelById(ChannelId).sendMessage("**Sem Músicas na Fila**").queue(Message -> Message.delete().queueAfter(5, java.util.concurrent.TimeUnit.SECONDS));
+            }
+        });
+    }
+
+    public void startTrack(Track track) {
         this.guildMusicManager.getLink().ifPresent(
                 (link) -> link.createOrUpdatePlayer()
                         .setTrack(track)
-                        .setVolume(50)
+                        .setVolume(100)
+                        .setPosition(0L)
                         .subscribe()
         );
+        current = track;
+    }
+    public void previousTrack() {
+
+        if (current != null) {
+            queue.offerFirst(current);
+        }
+
+        this.guildMusicManager.getPlayer().ifPresent(Player -> {
+            MyUserData isUserData = Player.getTrack().getUserData(MyUserData.class);
+            long GuildId = isUserData.isRequesterGuild();
+            long ChannelId = isUserData.isRequesterChannel();
+            JDA JavaDiscordAPI = BotClient.GetJDA();
+
+            if (!history.isEmpty()) {
+                Track Previous = history.pop();
+                this.startTrack(Previous);
+            } else {
+                JavaDiscordAPI.getGuildById(GuildId).getTextChannelById(ChannelId).sendMessage("**Sem Músicas Anteriores**").queue(Message -> Message.delete().queueAfter(5, java.util.concurrent.TimeUnit.SECONDS));
+            }
+        });
     }
 
     public static String formatTime(long isLavaMs) {
@@ -109,5 +180,15 @@ public class TrackScheduler {
         String S = (Seconds < 10 ? "0" : "") + Seconds;
 
         return H + ":" + M + ":" + S;
+    }
+
+    public void clearNowPlayingMessage() {
+        if (nowPlayingMessage != null) {
+            nowPlayingMessage.delete().queue(
+                    success -> {},
+                    error -> {}
+            );
+            nowPlayingMessage = null;
+        }
     }
 }
